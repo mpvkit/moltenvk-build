@@ -54,7 +54,7 @@ private class BuildVulkan: BaseBuild {
 
         // Generate xcframework for all platforms
         try buildXCFramework(name: "MoltenVK", platforms: platforms())
-
+        try packageAllRelease()
 
         // Generate xcframework for different platforms
         if BaseBuild.splitPlatform {
@@ -97,4 +97,48 @@ private class BuildVulkan: BaseBuild {
         try Utility.launch(path: "/usr/bin/zip", arguments: ["-qr", zipFile.path, XCFrameworkFile], currentDirectoryURL: directoryURL + "Package/Release/MoltenVK/static/")
         Utility.shell("swift package compute-checksum \(zipFile.path) > \(checksumFile.path)")
     }
+
+    private func packageAllRelease() throws {
+        let releaseDirPath = URL.currentDirectory + ["release"]
+        let releaseLibPath = releaseDirPath + [library.rawValue]
+        try? FileManager.default.removeItem(at: releaseLibPath)
+        try? FileManager.default.createDirectory(at: releaseLibPath, withIntermediateDirectories: true, attributes: nil)
+
+
+        // copy includes
+        let includePath =  directoryURL + "Package/Release/MoltenVK/include"
+        let destIncludePath = releaseLibPath + ["include"]
+        try FileManager.default.copyItem(at: includePath, to: destIncludePath)
+
+        // generate pkg-config file example
+        let destPkgConfigPath = releaseLibPath + ["pkgconfig-example"]
+        try? FileManager.default.createDirectory(at: destPkgConfigPath, withIntermediateDirectories: true, attributes: nil)
+
+        let vulkanPC = destPkgConfigPath + "MoltenVK.pc"
+        let content = """
+        prefix=/path/to/workdir/\(library.rawValue)/path/to/thin/platform
+        includedir=${prefix}/include
+        libdir=${prefix}/lib
+
+        Name: Vulkan-Loader
+        Description: Vulkan Loader
+        Version: \(self.library.version)
+        Libs: -L${libdir} -lMoltenVK
+        Cflags: -I${includedir}
+        """
+        FileManager.default.createFile(atPath: vulkanPC.path, contents: content.data(using: .utf8), attributes: nil)
+
+        // copy xcframeworks
+        let xcframeworks = directoryURL + "Package/Release/MoltenVK/static/MoltenVK.xcframework"
+        let destLibPath = releaseLibPath + ["lib"]
+        try? FileManager.default.createDirectory(at: destLibPath, withIntermediateDirectories: true, attributes: nil)
+        try FileManager.default.copyItem(at: xcframeworks, to: destLibPath + "MoltenVK.xcframework")
+
+
+        // zip all
+        let destZipLibPath = releaseDirPath + ["MoltenVK-all.zip"]
+        try? FileManager.default.removeItem(at: destZipLibPath)
+        try Utility.launch(path: "/usr/bin/zip", arguments: ["-qr", destZipLibPath.path, "./"], currentDirectoryURL: releaseLibPath)
+    }
+
 }
