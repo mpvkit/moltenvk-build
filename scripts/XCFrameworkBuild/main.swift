@@ -42,10 +42,10 @@ private class BuildVulkan: BaseBuild {
 
     override func buildALL() throws {
         // pull dependencies code
-        var arguments = platforms().map {
-            "--\($0.name)"
-        }
-        try Utility.launch(path: (directoryURL + "fetchDependencies").path, arguments: arguments, currentDirectoryURL: directoryURL)
+        // let arguments = platforms().map {
+        //     "--\($0.name)"
+        // }
+        // try Utility.launch(path: (directoryURL + "fetchDependencies").path, arguments: arguments, currentDirectoryURL: directoryURL)
 
         // clean old release files
         let releaseDirPath = URL.currentDirectory + ["release"]
@@ -66,7 +66,7 @@ private class BuildVulkan: BaseBuild {
                     arguments += [.isimulator]
                     platforms.removeAll(where: { $0 == .isimulator } )
                 }
-                try buildXCFramework(name: "MoltenVK-ios", platforms: platforms)
+                try buildXCFramework(name: "MoltenVK-ios", platforms: arguments)
             }
             if platforms.contains(.tvos) {
                 var arguments : [PlatformType] = [.tvos]
@@ -75,7 +75,7 @@ private class BuildVulkan: BaseBuild {
                     arguments += [.tvsimulator]
                     platforms.removeAll(where: { $0 == .tvsimulator } )
                 }
-                try buildXCFramework(name: "MoltenVK-tvos", platforms: platforms)
+                try buildXCFramework(name: "MoltenVK-tvos", platforms: arguments)
             }
             for platform in platforms {
                 try buildXCFramework(name: "MoltenVK-\(platform.rawValue)", platforms: [platform])
