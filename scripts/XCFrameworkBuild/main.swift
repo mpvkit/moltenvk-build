@@ -42,10 +42,10 @@ private class BuildVulkan: BaseBuild {
 
     override func buildALL() throws {
         // pull dependencies code
-        // let arguments = platforms().map {
-        //     "--\($0.name)"
-        // }
-        // try Utility.launch(path: (directoryURL + "fetchDependencies").path, arguments: arguments, currentDirectoryURL: directoryURL)
+        let arguments = platforms().map {
+            "--\($0.name)"
+        }
+        try Utility.launch(path: (directoryURL + "fetchDependencies").path, arguments: arguments, currentDirectoryURL: directoryURL)
 
         // clean old release files
         let releaseDirPath = URL.currentDirectory + ["release"]
