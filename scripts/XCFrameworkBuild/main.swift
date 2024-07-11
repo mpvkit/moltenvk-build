@@ -122,21 +122,28 @@ private class BuildVulkan: BaseBuild {
         Name: Vulkan-Loader
         Description: Vulkan Loader
         Version: \(self.library.version)
-        Libs: -L${libdir} -lMoltenVK -framework CoreFoundation -framework CoreGraphics -framework Foundation -framework IOSurface -framework Metal -framework QuartzCore #framework#
+        Libs: -L${libdir} -lMoltenVK #framework#
         Cflags: -I${includedir}
         """
 
-        var content = templatePC.replacingOccurrences(of: "#framework#", with: "-framework UIKit -framework IOKit")
-        var vulkanPC = destPkgConfigPath + "MoltenVK.pc"
-        FileManager.default.createFile(atPath: vulkanPC.path, contents: content.data(using: .utf8), attributes: nil)
-
-        content = templatePC.replacingOccurrences(of: "#framework#", with: "-framework Cocoa -framework IOKit")
-        vulkanPC = destPkgConfigPath + "MoltenVK-macos.pc"
-        FileManager.default.createFile(atPath: vulkanPC.path, contents: content.data(using: .utf8), attributes: nil)
-
-        content = templatePC.replacingOccurrences(of: "#framework#", with: "-framework UIKit")
-        vulkanPC = destPkgConfigPath + "MoltenVK-tvos.pc"
-        FileManager.default.createFile(atPath: vulkanPC.path, contents: content.data(using: .utf8), attributes: nil)
+        for platform in platforms() {
+            var frameworks = ["CoreFoundation", "CoreGraphics", "Foundation", "IOSurface", "Metal", "QuartzCore"]
+            if platform == .macos {
+                frameworks.append("Cocoa")
+            } 
+            if platform != .macos {
+                frameworks.append("UIKit")
+            }
+            if !(platform == .tvos || platform == .tvsimulator) {
+                frameworks.append("IOKit")
+            }
+            let libframework = frameworks.map {
+                "-framework \($0)"
+            }.joined(separator: " ")
+            let content = templatePC.replacingOccurrences(of: "#framework#", with: libframework)
+            let vulkanPC = destPkgConfigPath + "MoltenVK-\(platform.rawValue).pc"
+            FileManager.default.createFile(atPath: vulkanPC.path, contents: content.data(using: .utf8), attributes: nil)
+        }
 
         // copy xcframeworks
         let xcframeworks = directoryURL + "Package/Release/MoltenVK/static/MoltenVK.xcframework"
