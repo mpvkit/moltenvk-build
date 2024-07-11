@@ -1,8 +1,8 @@
 import Foundation
 
 do {
-    try Build.performCommand(arguments: Array(CommandLine.arguments.dropFirst()))
-
+    let options = try ArgumentOptions.parse(CommandLine.arguments)
+    try Build.performCommand(options)
 
     try BuildVulkan().buildALL()
 } catch {
@@ -57,7 +57,7 @@ private class BuildVulkan: BaseBuild {
         try packageAllRelease()
 
         // Generate xcframework for different platforms
-        if BaseBuild.splitPlatform {
+        if BaseBuild.options.enableSplitPlatform {
             var platforms = self.platforms()
             if platforms.contains(.ios) {
                 var arguments : [PlatformType] = [.ios]
@@ -114,8 +114,7 @@ private class BuildVulkan: BaseBuild {
         let destPkgConfigPath = releaseLibPath + ["pkgconfig-example"]
         try? FileManager.default.createDirectory(at: destPkgConfigPath, withIntermediateDirectories: true, attributes: nil)
 
-        let vulkanPC = destPkgConfigPath + "MoltenVK.pc"
-        let content = """
+        let templatePC = """
         prefix=/path/to/workdir/\(library.rawValue)/path/to/thin/platform
         includedir=${prefix}/include
         libdir=${prefix}/lib
@@ -123,9 +122,20 @@ private class BuildVulkan: BaseBuild {
         Name: Vulkan-Loader
         Description: Vulkan Loader
         Version: \(self.library.version)
-        Libs: -L${libdir} -lMoltenVK
+        Libs: -L${libdir} -lMoltenVK -framework CoreFoundation -framework CoreGraphics -framework Foundation -framework IOSurface -framework Metal -framework QuartzCore #framework#
         Cflags: -I${includedir}
         """
+
+        var content = templatePC.replacingOccurrences(of: "#framework#", with: "-framework UIKit -framework IOKit")
+        var vulkanPC = destPkgConfigPath + "MoltenVK.pc"
+        FileManager.default.createFile(atPath: vulkanPC.path, contents: content.data(using: .utf8), attributes: nil)
+
+        content = templatePC.replacingOccurrences(of: "#framework#", with: "-framework Cocoa -framework IOKit")
+        vulkanPC = destPkgConfigPath + "MoltenVK-macos.pc"
+        FileManager.default.createFile(atPath: vulkanPC.path, contents: content.data(using: .utf8), attributes: nil)
+
+        content = templatePC.replacingOccurrences(of: "#framework#", with: "-framework UIKit")
+        vulkanPC = destPkgConfigPath + "MoltenVK-tvos.pc"
         FileManager.default.createFile(atPath: vulkanPC.path, contents: content.data(using: .utf8), attributes: nil)
 
         // copy xcframeworks

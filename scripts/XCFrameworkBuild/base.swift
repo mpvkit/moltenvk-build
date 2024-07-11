@@ -1,7 +1,11 @@
 import Foundation
 
 enum Build {
-    static func performCommand(arguments: [String]) throws {
+    static func performCommand(_ options: ArgumentOptions) throws {
+        if options.showHelp {
+            print(options.help())
+            return
+        }
         if Utility.shell("which brew") == nil {
             print("""
             You need to run the script first
@@ -20,42 +24,92 @@ enum Build {
             try? FileManager.default.createDirectory(at: path, withIntermediateDirectories: false, attributes: nil)
         }
         FileManager.default.changeCurrentDirectoryPath(path.path)
+        BaseBuild.options = options
+        if !options.platforms.isEmpty {
+            BaseBuild.platforms = options.platforms
+        }
+    }
+
+}
+
+
+class ArgumentOptions {
+    private let arguments: [String]
+    var enableDebug: Bool = false
+    var enableSplitPlatform: Bool = false
+    var enableGPL: Bool = false
+    var showHelp: Bool = false
+    var platforms : [PlatformType] = []
+
+    init() {
+        self.arguments = []
+    }
+
+    init(arguments: [String]) {
+        self.arguments = Array(arguments.dropFirst())
+    }
+
+    func contains(_ argument: String) -> Bool {  
+        return self.arguments.firstIndex(of: argument) != nil
+    }
+
+
+    func help() -> String {
+        """
+        Usage: make build [OPTION]...
+        Default Build: make build enable-gpl
+
+        Options:
+            help                    display this help and exit
+            enable-debug            build ffmpeg with debug information
+            enable-gpl              build ffmpeg with GPL license
+            enable-split-platform   split XCFramework by platform
+            platforms=xros,ios      Only build specified platforms, all available platforms: macos,ios,isimulator,tvos,tvsimulator,maccatalyst
+        """
+    }
+
+    static func parse(_ arguments: [String]) throws -> ArgumentOptions {
+        let options = ArgumentOptions(arguments: arguments)
         for argument in arguments {
-            if argument == "enable-debug" {
-                BaseBuild.isDebug = true
-            } else if argument == "enable-split-platform" {
-                BaseBuild.splitPlatform = true
-            } else if argument.hasPrefix("platforms=") {
-                let values = String(argument.suffix(argument.count - "platforms=".count))
-                var platforms : [PlatformType] = []
-                for val in values.split(separator: ",") {
-                    let platformStr = val.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                    switch platformStr {
-                    case "ios":
-                        platforms += [PlatformType.ios, PlatformType.isimulator]
-                    case "tvos":
-                        platforms += [PlatformType.tvos, PlatformType.tvsimulator]
-                    default:
-                        if let other = PlatformType(rawValue: platformStr), !platforms.contains(other) {
-                            platforms += [other]
-                        } else {
-                            throw NSError(domain: "unknown platform: \(val)", code: 1)
+            switch argument {
+            case "-h", "--help":
+                options.showHelp = true
+            case "enable-debug" :
+                options.enableDebug = true
+            case "enable-gpl" :
+                options.enableGPL = true
+            case "enable-split-platform" :
+                options.enableSplitPlatform = true
+            default:
+                if argument.hasPrefix("platforms=") {
+                    let values = String(argument.suffix(argument.count - "platforms=".count))
+                    for val in values.split(separator: ",") {
+                        let platformStr = val.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                        switch platformStr {
+                        case "ios":
+                            options.platforms += [PlatformType.ios, PlatformType.isimulator]
+                        case "tvos":
+                            options.platforms += [PlatformType.tvos, PlatformType.tvsimulator]
+                        default:
+                            if let other = PlatformType(rawValue: platformStr), !options.platforms.contains(other) {
+                                options.platforms += [other]
+                            } else {
+                                throw NSError(domain: "unknown platform: \(val)", code: 1)
+                            }
                         }
                     }
                 }
-                if !platforms.isEmpty {
-                    BaseBuild.platforms = platforms
-                }
             }
         }
+
+        return options
     }
 }
 
 class BaseBuild {
     static let defaultPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     static var platforms = PlatformType.allCases
-    static var isDebug: Bool = false
-    static var splitPlatform: Bool = false
+    static var options = ArgumentOptions()
     let library: Library
     let directoryURL: URL
     init(library: Library) {
@@ -63,14 +117,20 @@ class BaseBuild {
         directoryURL = URL.currentDirectory + "\(library.rawValue)-\(library.version)"
 
         if library.url.hasSuffix(".zip") {
-             // unzip builded static library
-            try? FileManager.default.removeItem(atPath: directoryURL.path)
+            // unzip builded static library
+            let outputFileName = "\(library.rawValue).zip"
+            let outputFile = directoryURL + outputFileName
+            // delete invalid downloaded files
+            let attributes = try? FileManager.default.attributesOfItem(atPath: outputFile.path)
+            if let fileSize = attributes?[FileAttributeKey.size] as? UInt64, fileSize <= 0 {
+                try? FileManager.default.removeItem(atPath: directoryURL.path)
+            }
             try! FileManager.default.createDirectory(atPath: directoryURL.path, withIntermediateDirectories: true, attributes: nil)
 
-            let outputFileName = "\(library.rawValue).zip"
-            try! Utility.launch(executableName: "wget", arguments: ["-O", outputFileName, library.url], currentDirectoryURL: directoryURL)
-            try! Utility.launch(path: "/usr/bin/unzip", arguments: [outputFileName], currentDirectoryURL: directoryURL)
-            try? FileManager.default.removeItem(at: directoryURL + [outputFileName])
+            if !FileManager.default.fileExists(atPath: outputFile.path) {
+                try! Utility.launch(path: "wget", arguments: ["-O", outputFileName, library.url], currentDirectoryURL: directoryURL)
+                try! Utility.launch(path: "/usr/bin/unzip", arguments: [outputFileName], currentDirectoryURL: directoryURL)
+            }
         } else if !FileManager.default.fileExists(atPath: directoryURL.path) {
             // pull code from git
             try! Utility.launch(path: "/usr/bin/git", arguments: ["-c", "advice.detachedHead=false", "clone", "--depth", "1", "--branch", library.version, library.url, directoryURL.path])
@@ -291,7 +351,7 @@ class BaseBuild {
             try buildXCFramework(name: framework, paths: Array(frameworkGenerated.values))
 
             // Generate xcframework for different platforms
-            if BaseBuild.splitPlatform {
+            if BaseBuild.options.enableSplitPlatform {
                 if let iosFrameworkPath = frameworkGenerated[.ios] {
                     var frameworkPaths: [String] = [iosFrameworkPath]
                     frameworkGenerated.removeValue(forKey: .ios)
@@ -385,8 +445,12 @@ class BaseBuild {
         return frameworkDir.path
     }
 
-    func thinDir(platform: PlatformType, arch: ArchType) -> URL {
+    func thinDir(library: Library, platform: PlatformType, arch: ArchType) -> URL {
         URL.currentDirectory + [library.rawValue, platform.rawValue, "thin", arch.rawValue]
+    }
+
+    func thinDir(platform: PlatformType, arch: ArchType) -> URL {
+        thinDir(library: library, platform: platform, arch: arch)
     }
 
     func scratch(platform: PlatformType, arch: ArchType) -> URL {
@@ -564,7 +628,7 @@ class BaseBuild {
             try Utility.launch(path: "/usr/bin/zip", arguments: ["-qr", zipFile.path, XCFrameworkFile], currentDirectoryURL: URL.currentDirectory + ["../Sources"])
             Utility.shell("swift package compute-checksum \(zipFile.path) > \(checksumFile.path)")
 
-            if BaseBuild.splitPlatform {
+            if BaseBuild.options.enableSplitPlatform {
                 for platform in BaseBuild.platforms {
                     let XCFrameworkName =  "\(framework)-\(platform.rawValue)"
                     let XCFrameworkFile =  XCFrameworkName + ".xcframework"
@@ -604,6 +668,10 @@ class ZipBaseBuild : BaseBuild {
             for arch in architectures(platform) {
                 // restore lib
                 let srcThinLibPath = directoryURL + ["lib"] + [platform.rawValue, "thin", arch.rawValue, "lib"]
+                // ignore if platform not support
+                if !FileManager.default.fileExists(atPath: srcThinLibPath.path) {
+                    continue
+                }
                 let destThinPath = thinDir(platform: platform, arch: arch)
                 let destThinLibPath = destThinPath + ["lib"]
                 try? FileManager.default.createDirectory(atPath: destThinPath.path, withIntermediateDirectories: true, attributes: nil)
@@ -885,18 +953,19 @@ enum Utility {
 
     @discardableResult
     static func launch(path: String, arguments: [String], isOutput: Bool = false, currentDirectoryURL: URL? = nil, environment: [String: String] = [:]) throws -> String {
-        try launch(executableURL: URL(fileURLWithPath: path), arguments: arguments, isOutput: isOutput, currentDirectoryURL: currentDirectoryURL, environment: environment)
-    }
-
-    @discardableResult
-    static func launch(executableName: String, arguments: [String], isOutput: Bool = false, currentDirectoryURL: URL? = nil, environment: [String: String] = [:]) throws -> String {
-        let executableURL = Utility.shell("which \(executableName)", isOutput: true)!
-        return try launch(executableURL: URL(fileURLWithPath: executableURL), arguments: arguments, isOutput: isOutput, currentDirectoryURL: currentDirectoryURL, environment: environment)
+        if !path.hasPrefix("/") {
+            let execPath = Utility.shell("which \(path)", isOutput: true)!
+            if execPath.isEmpty {
+                throw NSError(domain: "[\(path)] not found", code: 1)
+            }
+            return try launch(executableURL: URL(fileURLWithPath: execPath), arguments: arguments, isOutput: isOutput, currentDirectoryURL: currentDirectoryURL, environment: environment)
+        } else {
+            return try launch(executableURL: URL(fileURLWithPath: path), arguments: arguments, isOutput: isOutput, currentDirectoryURL: currentDirectoryURL, environment: environment)
+        }
     }
 
     @discardableResult
     static func launch(executableURL: URL, arguments: [String], isOutput: Bool = false, currentDirectoryURL: URL? = nil, environment: [String: String] = [:]) throws -> String {
-        #if os(macOS)
         let task = Process()
         var environment = environment
         // for homebrew 1.12
@@ -915,6 +984,7 @@ enum Utility {
         let errorPipe = Pipe()
         task.standardOutput = outputPipe
         task.standardError = errorPipe
+        
         if let curURL = currentDirectoryURL {
             // output to file
             logURL = curURL.appendingPathExtension("log")
@@ -981,13 +1051,16 @@ enum Utility {
             }
         } else {
             if let logURL = logURL {
+                // print log when run in GitHub Action
+                if ProcessInfo.processInfo.environment.keys.contains("GITHUB_ACTION") {
+                    if let content = String(data: try Data(contentsOf: logURL), encoding: .utf8) {
+                        print(content)
+                    }
+                }
                 print("please view log file for detail: \(logURL)\n")
             }
-            throw NSError(domain: "fail", code: Int(task.terminationStatus))
+            throw NSError(domain: "\(executableURL.lastPathComponent) execute failed", code: Int(task.terminationStatus))
         }
-        #else
-        return ""
-        #endif
     }
 
     @discardableResult
@@ -1043,3 +1116,4 @@ extension URL {
         return url
     }
 }
+

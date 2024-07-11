@@ -26,7 +26,7 @@ jobs:
 
     - name: Build
       run: |
-        swift run --package-path scripts build enable-split-platform
+        make build split-platform=true
     
     - name: Update Package.swift
       run: |
