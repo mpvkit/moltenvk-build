@@ -111,21 +111,6 @@ private class BuildVulkan: BaseBuild {
         try FileManager.default.copyItem(at: includePath, to: destIncludePath)
 
         // generate pkg-config file example
-        let destPkgConfigPath = releaseLibPath + ["pkgconfig-example"]
-        try? FileManager.default.createDirectory(at: destPkgConfigPath, withIntermediateDirectories: true, attributes: nil)
-
-        let templatePC = """
-        prefix=/path/to/workdir/\(library.rawValue)/path/to/thin/platform
-        includedir=${prefix}/include
-        libdir=${prefix}/lib
-
-        Name: Vulkan-Loader
-        Description: Vulkan Loader
-        Version: \(self.library.version)
-        Libs: -L${libdir} -lMoltenVK #framework#
-        Cflags: -I${includedir}
-        """
-
         for platform in platforms() {
             var frameworks = ["CoreFoundation", "CoreGraphics", "Foundation", "IOSurface", "Metal", "QuartzCore"]
             if platform == .macos {
@@ -140,9 +125,24 @@ private class BuildVulkan: BaseBuild {
             let libframework = frameworks.map {
                 "-framework \($0)"
             }.joined(separator: " ")
-            let content = templatePC.replacingOccurrences(of: "#framework#", with: libframework)
-            let vulkanPC = destPkgConfigPath + "MoltenVK-\(platform.rawValue).pc"
-            FileManager.default.createFile(atPath: vulkanPC.path, contents: content.data(using: .utf8), attributes: nil)
+            for arch in architectures(platform) {
+                let content = """
+                prefix=/path/to/workdir/\(library.rawValue)/\(platform.rawValue)/thin/\(arch.rawValue)
+                includedir=${prefix}/include
+                libdir=${prefix}/lib
+
+                Name: Vulkan-Loader
+                Description: Vulkan Loader
+                Version: \(self.library.version)
+                Libs: -L${libdir} -lMoltenVK \(libframework)
+                Cflags: -I${includedir}
+                """
+                let destPkgConfigPath = releaseLibPath + ["pkgconfig-example", platform.rawValue, arch.rawValue]
+                try? FileManager.default.createDirectory(at: destPkgConfigPath, withIntermediateDirectories: true, attributes: nil)
+
+                let vulkanPC = destPkgConfigPath +  "MoltenVK.pc"
+                FileManager.default.createFile(atPath: vulkanPC.path, contents: content.data(using: .utf8), attributes: nil)
+            }
         }
 
         // copy xcframeworks
