@@ -2,10 +2,6 @@ import Foundation
 
 enum Build {
     static func performCommand(_ options: ArgumentOptions) throws {
-        if options.showHelp {
-            print(options.help())
-            return
-        }
         if Utility.shell("which brew") == nil {
             print("""
             You need to run the script first
@@ -38,7 +34,6 @@ class ArgumentOptions {
     var enableDebug: Bool = false
     var enableSplitPlatform: Bool = false
     var enableGPL: Bool = false
-    var showHelp: Bool = false
     var platforms : [PlatformType] = []
 
     init() {
@@ -46,39 +41,22 @@ class ArgumentOptions {
     }
 
     init(arguments: [String]) {
-        self.arguments = Array(arguments.dropFirst())
+        self.arguments = arguments
     }
 
     func contains(_ argument: String) -> Bool {  
         return self.arguments.firstIndex(of: argument) != nil
     }
 
-
-    func help() -> String {
-        """
-        Usage: make build [OPTION]...
-        Default Build: make build enable-gpl
-
-        Options:
-            help                    display this help and exit
-            enable-debug            build ffmpeg with debug information
-            enable-gpl              build ffmpeg with GPL license
-            enable-split-platform   split XCFramework by platform
-            platforms=xros,ios      Only build specified platforms, all available platforms: macos,ios,isimulator,tvos,tvsimulator,maccatalyst
-        """
-    }
-
     static func parse(_ arguments: [String]) throws -> ArgumentOptions {
-        let options = ArgumentOptions(arguments: arguments)
+        let options = ArgumentOptions(arguments: Array(arguments.dropFirst()))
         for argument in arguments {
             switch argument {
-            case "-h", "--help":
-                options.showHelp = true
-            case "enable-debug" :
+            case "enable-debug":
                 options.enableDebug = true
-            case "enable-gpl" :
+            case "enable-gpl":
                 options.enableGPL = true
-            case "enable-split-platform" :
+            case "enable-split-platform":
                 options.enableSplitPlatform = true
             default:
                 if argument.hasPrefix("platforms=") {
@@ -110,6 +88,11 @@ class BaseBuild {
     static let defaultPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     static var platforms = PlatformType.allCases
     static var options = ArgumentOptions()
+    static let splitPlatformGroups = [
+        PlatformType.macos.rawValue: [PlatformType.macos, PlatformType.maccatalyst],
+        PlatformType.ios.rawValue: [PlatformType.ios, PlatformType.isimulator],
+        PlatformType.tvos.rawValue: [PlatformType.tvos, PlatformType.tvsimulator]
+    ]
     let library: Library
     let directoryURL: URL
     init(library: Library) {
@@ -352,26 +335,16 @@ class BaseBuild {
 
             // Generate xcframework for different platforms
             if BaseBuild.options.enableSplitPlatform {
-                if let iosFrameworkPath = frameworkGenerated[.ios] {
-                    var frameworkPaths: [String] = [iosFrameworkPath]
-                    frameworkGenerated.removeValue(forKey: .ios)
-                    if let isimulatorFrameworkPath = frameworkGenerated[.isimulator] {
-                        frameworkPaths.append(isimulatorFrameworkPath)
-                        frameworkGenerated.removeValue(forKey: .isimulator)
+                for (group, platforms) in BaseBuild.splitPlatformGroups {
+                    var frameworkPaths: [String] = []
+                    for platform in platforms {
+                        if let frameworkPath = frameworkGenerated[platform] {
+                            frameworkPaths.append(frameworkPath)
+                        }
                     }
-                    try buildXCFramework(name: "\(framework)-ios", paths: frameworkPaths)
-                }
-                if let tvosFrameworkPath = frameworkGenerated[.tvos] {
-                    var frameworkPaths: [String] = [tvosFrameworkPath]
-                    frameworkGenerated.removeValue(forKey: .tvos)
-                    if let tvsimulatorFrameworkPath = frameworkGenerated[.tvsimulator] {
-                        frameworkPaths.append(tvsimulatorFrameworkPath)
-                        frameworkGenerated.removeValue(forKey: .tvsimulator)
+                    if !frameworkPaths.isEmpty {
+                        try buildXCFramework(name: "\(framework)-\(group)", paths: frameworkPaths)
                     }
-                    try buildXCFramework(name: "\(framework)-tvos", paths: frameworkPaths)
-                }
-                for (platform, frameworkPath) in frameworkGenerated {
-                    try buildXCFramework(name: "\(framework)-\(platform.rawValue)", paths: [frameworkPath])
                 }
             }
         }
@@ -586,16 +559,25 @@ class BaseBuild {
 
 
         // copy pkg-config file example
-        let firstPlatformLibPath = thinDir(platform: firstPlatform, arch: firstArch) + ["lib"]
-        let pkgconfigPath = firstPlatformLibPath + ["pkgconfig"]
-        let destPkgConfigPath = releaseDirPath + [library.rawValue, "pkgconfig-example"]
-        try FileManager.default.copyItem(at: pkgconfigPath, to: destPkgConfigPath)
-        let pkgconfigFiles = Utility.listAllFiles(in: destPkgConfigPath)
-        for file in pkgconfigFiles {
-            if let data = FileManager.default.contents(atPath: file.path), var str = String(data: data, encoding: .utf8) {
-                str = str.replacingOccurrences(of: URL.currentDirectory.path, with: "/path/to/workdir")
-                str = str.replacingOccurrences(of: "/\(firstPlatform.rawValue)/thin/\(firstArch.rawValue)", with: "/path/to/thin/platform")
-                try! str.write(toFile: file.path, atomically: true, encoding: .utf8)
+        for platform in BaseBuild.platforms {
+            for arch in architectures(platform) {
+                let thinLibPath = thinDir(platform: platform, arch: arch) + ["lib"]
+                let pkgconfigPath = thinLibPath + ["pkgconfig"]
+                if !FileManager.default.fileExists(atPath: pkgconfigPath.path) {
+                    continue
+                }
+                let destPkgConfigDir = releaseDirPath + [library.rawValue, "pkgconfig-example", platform.rawValue]
+                let destPkgConfigPath = destPkgConfigDir + arch.rawValue
+                try? FileManager.default.createDirectory(at: destPkgConfigDir, withIntermediateDirectories: true, attributes: nil)
+                try FileManager.default.copyItem(at: pkgconfigPath, to: destPkgConfigPath)
+
+                let pkgconfigFiles = Utility.listAllFiles(in: destPkgConfigPath)
+                for file in pkgconfigFiles {
+                    if let data = FileManager.default.contents(atPath: file.path), var str = String(data: data, encoding: .utf8) {
+                        str = str.replacingOccurrences(of: URL.currentDirectory.path, with: "/path/to/workdir")
+                        try! str.write(toFile: file.path, atomically: true, encoding: .utf8)
+                    }
+                }
             }
         }
 
@@ -629,10 +611,10 @@ class BaseBuild {
             Utility.shell("swift package compute-checksum \(zipFile.path) > \(checksumFile.path)")
 
             if BaseBuild.options.enableSplitPlatform {
-                for platform in BaseBuild.platforms {
-                    let XCFrameworkName =  "\(framework)-\(platform.rawValue)"
+                for group in BaseBuild.splitPlatformGroups.keys {
+                    let XCFrameworkName =  "\(framework)-\(group)"
                     let XCFrameworkFile =  XCFrameworkName + ".xcframework"
-                    let XCFrameworkPath = URL.currentDirectory + ["../Sources", "\(framework)-\(platform.rawValue).xcframework"]
+                    let XCFrameworkPath = URL.currentDirectory + ["../Sources", "\(framework)-\(group).xcframework"]
                     if FileManager.default.fileExists(atPath: XCFrameworkPath.path) {
                         let zipFile = releaseDirPath + [XCFrameworkName + ".xcframework.zip"]
                         let checksumFile = releaseDirPath + [XCFrameworkName + ".xcframework.checksum.txt"]
@@ -683,15 +665,12 @@ class ZipBaseBuild : BaseBuild {
                 try? FileManager.default.copyItem(at: srcIncludePath, to: destIncludePath)
 
                 // restore pkgconfig
-                let srcPkgConfigPath = directoryURL + ["pkgconfig-example"]
+                let srcPkgConfigPath = directoryURL + ["pkgconfig-example", platform.rawValue, arch.rawValue]
                 let destPkgConfigPath = destThinPath + ["lib", "pkgconfig"]
                 try? FileManager.default.copyItem(at: srcPkgConfigPath, to: destPkgConfigPath)
-
-                // update pkgconfig prefix
                 Utility.listAllFiles(in: destPkgConfigPath).forEach { file in
                     if let data = FileManager.default.contents(atPath: file.path), var str = String(data: data, encoding: .utf8) {
                         str = str.replacingOccurrences(of: "/path/to/workdir", with: URL.currentDirectory.path)
-                        str = str.replacingOccurrences(of: "/path/to/thin/platform", with:  "/\(platform.rawValue)/thin/\(arch.rawValue)")
                         try! str.write(toFile: file.path, atomically: true, encoding: .utf8)
                     }
                 }

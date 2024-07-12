@@ -13,12 +13,9 @@ https://github.com/mpvkit/moltenvk-build.git
 ## How to build
 
 ```bash
-swift run --package-path scripts
-```
-
-or 
-
-```bash
-# deployment platform: macos,ios,tvos,maccatalyst
-swift run --package-path scripts build platforms=ios,macos
+make build
+# or specified platforms 
+make build platforms=ios,macos
+# or see help
+make help
 ```
