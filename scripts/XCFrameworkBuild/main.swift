@@ -16,7 +16,7 @@ enum Library: String, CaseIterable {
     var version: String {
         switch self {
         case .vulkan:
-            return "v1.2.8"
+            return "v1.2.9"
         }
     }
 
@@ -111,6 +111,7 @@ private class BuildVulkan: BaseBuild {
         try FileManager.default.copyItem(at: includePath, to: destIncludePath)
 
         // generate pkg-config file example
+        let version = self.library.version.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
         for platform in platforms() {
             var frameworks = ["CoreFoundation", "CoreGraphics", "Foundation", "IOSurface", "Metal", "QuartzCore"]
             if platform == .macos {
@@ -133,14 +134,14 @@ private class BuildVulkan: BaseBuild {
 
                 Name: Vulkan-Loader
                 Description: Vulkan Loader
-                Version: \(self.library.version)
+                Version: \(version)
                 Libs: -L${libdir} -lMoltenVK \(libframework)
                 Cflags: -I${includedir}
                 """
                 let destPkgConfigPath = releaseLibPath + ["pkgconfig-example", platform.rawValue, arch.rawValue]
                 try? FileManager.default.createDirectory(at: destPkgConfigPath, withIntermediateDirectories: true, attributes: nil)
 
-                let vulkanPC = destPkgConfigPath +  "MoltenVK.pc"
+                let vulkanPC = destPkgConfigPath +  "vulkan.pc"
                 FileManager.default.createFile(atPath: vulkanPC.path, contents: content.data(using: .utf8), attributes: nil)
             }
         }
