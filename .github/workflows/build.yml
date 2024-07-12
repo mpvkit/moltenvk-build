@@ -43,7 +43,6 @@ jobs:
         default_author: github_actions
         add: |
           - Package.swift
-          - Sources
         message: "chore: release version ${{ github.event.inputs.version }}"
         push: "origin HEAD:${{ github.ref_name }}"
         
