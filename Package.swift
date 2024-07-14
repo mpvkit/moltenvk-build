@@ -8,14 +8,24 @@ let package = Package(
     products: [
         .library(
             name: "MoltenVK", 
-            targets: ["MoltenVK"]
+            targets: ["_MoltenVK"]
         ),
     ],
     targets: [
+        // Need a dummy target to embedded correctly.
+        // https://github.com/apple/swift-package-manager/issues/6069
+        .target(
+            name: "_MoltenVK",
+            dependencies: ["MoltenVK"],
+            path: "Sources/_Dummy"
+        ),
+        //AUTO_GENERATE_TARGETS_BEGIN//
+
         .binaryTarget(
             name: "MoltenVK",
             url: "https://github.com/mpvkit/moltenvk-build/releases/download/1.2.9/MoltenVK.xcframework.zip",
-            checksum: "b784a06a22706e7546f3b5a15ab0963557135517f6e5900fead80a08cec48ff6"
-        )
+            checksum: "02dd7f51814855b7db9eacd883042b3e9481eb658de6bc63290af80149f2b94f"
+        ),
+        //AUTO_GENERATE_TARGETS_END//
     ]
 )
