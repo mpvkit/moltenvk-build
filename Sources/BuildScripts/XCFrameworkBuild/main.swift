@@ -26,6 +26,20 @@ enum Library: String, CaseIterable {
             return "https://github.com/KhronosGroup/MoltenVK"
         }
     }
+
+    // for generate Package.swift
+    var targets : [PackageTarget] {
+        switch self {
+        case .vulkan:
+            return  [
+                .target(
+                    name: "MoltenVK",
+                    url: "https://github.com/mpvkit/moltenvk-build/releases/download/\(BaseBuild.options.releaseVersion)/MoltenVK.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/moltenvk-build/releases/download/\(BaseBuild.options.releaseVersion)/MoltenVK.xcframework.checksum.txt"
+                ),
+            ]
+        }
+    }
 }
 
 

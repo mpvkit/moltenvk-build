@@ -19,13 +19,13 @@ enum Build {
         if !FileManager.default.fileExists(atPath: path.path) {
             try? FileManager.default.createDirectory(at: path, withIntermediateDirectories: false, attributes: nil)
         }
+        try? FileManager.default.removeItem(atPath: (URL.currentDirectory + "dist/release/Package.swift").path)
         FileManager.default.changeCurrentDirectoryPath(path.path)
         BaseBuild.options = options
         if !options.platforms.isEmpty {
             BaseBuild.platforms = options.platforms
         }
     }
-
 }
 
 
@@ -35,6 +35,7 @@ class ArgumentOptions {
     var enableSplitPlatform: Bool = false
     var enableGPL: Bool = false
     var platforms : [PlatformType] = []
+    var releaseVersion: String = "0.0.0"
 
     init() {
         self.arguments = []
@@ -59,8 +60,12 @@ class ArgumentOptions {
             case "enable-split-platform":
                 options.enableSplitPlatform = true
             default:
-                if argument.hasPrefix("platforms=") {
-                    let values = String(argument.suffix(argument.count - "platforms=".count))
+                if argument.hasPrefix("version=") {
+                    let version = String(argument.suffix(argument.count - "version=".count))
+                    options.releaseVersion = version
+                }
+                if argument.hasPrefix("platform=") {
+                    let values = String(argument.suffix(argument.count - "platform=".count))
                     for val in values.split(separator: ",") {
                         let platformStr = val.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
                         switch platformStr {
@@ -91,7 +96,8 @@ class BaseBuild {
     static let splitPlatformGroups = [
         PlatformType.macos.rawValue: [PlatformType.macos, PlatformType.maccatalyst],
         PlatformType.ios.rawValue: [PlatformType.ios, PlatformType.isimulator],
-        PlatformType.tvos.rawValue: [PlatformType.tvos, PlatformType.tvsimulator]
+        PlatformType.tvos.rawValue: [PlatformType.tvos, PlatformType.tvsimulator],
+        PlatformType.xros.rawValue: [PlatformType.xros, PlatformType.xrsimulator]
     ]
     let library: Library
     let directoryURL: URL
@@ -112,14 +118,14 @@ class BaseBuild {
 
             if !FileManager.default.fileExists(atPath: outputFile.path) {
                 try! Utility.launch(path: "wget", arguments: ["-O", outputFileName, library.url], currentDirectoryURL: directoryURL)
-                try! Utility.launch(path: "/usr/bin/unzip", arguments: [outputFileName], currentDirectoryURL: directoryURL)
+                try! Utility.launch(path: "/usr/bin/unzip", arguments: ["-o",outputFileName], currentDirectoryURL: directoryURL)
             }
         } else if !FileManager.default.fileExists(atPath: directoryURL.path) {
             // pull code from git
             try! Utility.launch(path: "/usr/bin/git", arguments: ["-c", "advice.detachedHead=false", "clone", "--depth", "1", "--branch", library.version, library.url, directoryURL.path])
 
             // apply patch
-            let patch = URL.currentDirectory + "../scripts/patch/\(library.rawValue)"
+            let patch = URL.currentDirectory + "../Sources/BuildScripts/patch/\(library.rawValue)"
             if FileManager.default.fileExists(atPath: patch.path) {
                 _ = try? Utility.launch(path: "/usr/bin/git", arguments: ["checkout", "."], currentDirectoryURL: directoryURL)
                 let fileNames = try! FileManager.default.contentsOfDirectory(atPath: patch.path).sorted()
@@ -140,6 +146,7 @@ class BaseBuild {
         }
         try createXCFramework()
         try packageRelease()
+        try generatePackageManagerFile()
     }
 
     func architectures(_ platform: PlatformType) -> [ArchType] {
@@ -237,20 +244,10 @@ class BaseBuild {
         }
     }
 
-    private func pkgConfigPath(platform: PlatformType, arch: ArchType) -> String {
-        var pkgConfigPath = ""
-        for lib in Library.allCases {
-            let path = URL.currentDirectory + [lib.rawValue, platform.rawValue, "thin", arch.rawValue]
-            if FileManager.default.fileExists(atPath: path.path) {
-                pkgConfigPath += "\(path.path)/lib/pkgconfig:"
-            }
-        }
-        return pkgConfigPath
-    }
-
     func environment(platform: PlatformType, arch: ArchType) -> [String: String] {
         let cFlags = cFlags(platform: platform, arch: arch).joined(separator: " ")
         let ldFlags = ldFlags(platform: platform, arch: arch).joined(separator: " ")
+        let pkgConfigPath = platform.pkgConfigPath(arch: arch)
         let pkgConfigPathDefault = Utility.shell("pkg-config --variable pc_path pkg-config", isOutput: true)!
         return [
             "LC_CTYPE": "C",
@@ -264,7 +261,7 @@ class BaseBuild {
             // 这个要加，不然cmake在编译maccatalyst 会有问题
             "CXXFLAGS": cFlags,
             "LDFLAGS": ldFlags,
-            "PKG_CONFIG_LIBDIR": platform.pkgConfigPath(arch: arch) + pkgConfigPathDefault,
+            "PKG_CONFIG_LIBDIR": pkgConfigPath + pkgConfigPathDefault,
             "PATH": BaseBuild.defaultPath,
         ]
     }
@@ -313,7 +310,8 @@ class BaseBuild {
 
     func createXCFramework() throws {
         // clean all old xcframework
-        try? Utility.removeFiles(extensions: [".xcframework"], currentDirectoryURL: URL.currentDirectory + ["../Sources"])
+        let xcframeworkReleasePath = URL.currentDirectory + ["xcframework"]
+        try? Utility.removeFiles(extensions: [".xcframework"], currentDirectoryURL: xcframeworkReleasePath)
 
         var frameworks: [String] = []
         let libNames = try self.frameworks()
@@ -357,7 +355,7 @@ class BaseBuild {
             arguments.append(frameworkPath)
         }
         arguments.append("-output")
-        let XCFrameworkFile = URL.currentDirectory + ["../Sources", name + ".xcframework"]
+        let XCFrameworkFile = URL.currentDirectory + ["xcframework", name + ".xcframework"]
         arguments.append(XCFrameworkFile.path)
         if FileManager.default.fileExists(atPath: XCFrameworkFile.path) {
             try? FileManager.default.removeItem(at: XCFrameworkFile)
@@ -559,6 +557,57 @@ class BaseBuild {
 
 
         // copy pkg-config file example
+        try packagePkgConfigRelease()
+
+        // zip build artifacts when there are frameworks to generate
+        if try self.frameworks().count > 0 {
+            let sourceLib = releaseDirPath + [library.rawValue]
+            let destZipLibPath = releaseDirPath + [library.rawValue + "-all.zip"]
+            try? FileManager.default.removeItem(at: destZipLibPath)
+            try Utility.launch(path: "/usr/bin/zip", arguments: ["-qr", destZipLibPath.path, "./"], currentDirectoryURL: sourceLib)
+        }
+
+        // zip xcframeworks
+        var frameworks: [String] = []
+        let libNames = try self.frameworks()
+        for libName in libNames {
+            if libName.hasPrefix("lib") {
+                frameworks.append("Lib" + libName.dropFirst(3))
+            } else {
+                frameworks.append(libName)
+            }
+        }
+        let xcframeworkReleasePath = URL.currentDirectory + ["xcframework"]
+        for framework in frameworks {
+            // clean old files
+            try Utility.launch(path: "/bin/rm", arguments: ["-rf", "\(framework)*.xcframework.zip"], currentDirectoryURL: releaseDirPath)
+            try Utility.launch(path: "/bin/rm", arguments: ["-rf", "\(framework)*.checksum.txt"], currentDirectoryURL: releaseDirPath)
+
+            let XCFrameworkFile =  framework + ".xcframework"
+            let zipFile = releaseDirPath + [framework + ".xcframework.zip"]
+            let checksumFile = releaseDirPath + [framework + ".xcframework.checksum.txt"]
+            try Utility.launch(path: "/usr/bin/zip", arguments: ["-qr", zipFile.path, XCFrameworkFile], currentDirectoryURL: xcframeworkReleasePath)
+            Utility.shell("swift package compute-checksum \(zipFile.path) > \(checksumFile.path)")
+
+            if BaseBuild.options.enableSplitPlatform {
+                for group in BaseBuild.splitPlatformGroups.keys {
+                    let XCFrameworkName =  "\(framework)-\(group)"
+                    let XCFrameworkFile =  XCFrameworkName + ".xcframework"
+                    let XCFrameworkPath = xcframeworkReleasePath + ["\(framework)-\(group).xcframework"]
+                    if FileManager.default.fileExists(atPath: XCFrameworkPath.path) {
+                        let zipFile = releaseDirPath + [XCFrameworkName + ".xcframework.zip"]
+                        let checksumFile = releaseDirPath + [XCFrameworkName + ".xcframework.checksum.txt"]
+                        try Utility.launch(path: "/usr/bin/zip", arguments: ["-qr", zipFile.path, XCFrameworkFile], currentDirectoryURL: xcframeworkReleasePath)
+                        Utility.shell("swift package compute-checksum \(zipFile.path) > \(checksumFile.path)")
+                    }
+                }
+            }
+        }
+    }
+
+    func packagePkgConfigRelease() throws {
+        let releaseDirPath = URL.currentDirectory + ["release"]
+        // copy pkg-config file example
         for platform in BaseBuild.platforms {
             for arch in architectures(platform) {
                 let thinLibPath = thinDir(platform: platform, arch: arch) + ["lib"]
@@ -580,49 +629,70 @@ class BaseBuild {
                 }
             }
         }
+    }
 
-        // zip build artifacts when there are frameworks to generate
-        if try self.frameworks().count > 0 {
-            let sourceLib = releaseDirPath + [library.rawValue]
-            let destZipLibPath = releaseDirPath + [library.rawValue + "-all.zip"]
-            try? FileManager.default.removeItem(at: destZipLibPath)
-            try Utility.launch(path: "/usr/bin/zip", arguments: ["-qr", destZipLibPath.path, "./"], currentDirectoryURL: sourceLib)
+    func generatePackageManagerFile() throws {
+        let releaseDirPath = URL.currentDirectory + ["release"]
+        let template = URL.currentDirectory + ["../docs/Package.template.swift"]
+        let packageFile = releaseDirPath + "Package.swift"
+
+        if !FileManager.default.fileExists(atPath: packageFile.path) {
+            try! FileManager.default.createDirectory(at: releaseDirPath, withIntermediateDirectories: true, attributes: nil)
+            try! FileManager.default.copyItem(at: template, to: packageFile)
         }
 
-        // zip xcframeworks
-        var frameworks: [String] = []
-        let libNames = try self.frameworks()
-        for libName in libNames {
-            if libName.hasPrefix("lib") {
-                frameworks.append("Lib" + libName.dropFirst(3))
-            } else {
-                frameworks.append(libName)
-            }
-        }
-        for framework in frameworks {
-            // clean old files
-            try Utility.launch(path: "/bin/rm", arguments: ["-rf", "\(framework)*.xcframework.zip"], currentDirectoryURL: releaseDirPath)
-            try Utility.launch(path: "/bin/rm", arguments: ["-rf", "\(framework)*.checksum.txt"], currentDirectoryURL: releaseDirPath)
-
-            let XCFrameworkFile =  framework + ".xcframework"
-            let zipFile = releaseDirPath + [framework + ".xcframework.zip"]
-            let checksumFile = releaseDirPath + [framework + ".xcframework.checksum.txt"]
-            try Utility.launch(path: "/usr/bin/zip", arguments: ["-qr", zipFile.path, XCFrameworkFile], currentDirectoryURL: URL.currentDirectory + ["../Sources"])
-            Utility.shell("swift package compute-checksum \(zipFile.path) > \(checksumFile.path)")
-
-            if BaseBuild.options.enableSplitPlatform {
-                for group in BaseBuild.splitPlatformGroups.keys {
-                    let XCFrameworkName =  "\(framework)-\(group)"
-                    let XCFrameworkFile =  XCFrameworkName + ".xcframework"
-                    let XCFrameworkPath = URL.currentDirectory + ["../Sources", "\(framework)-\(group).xcframework"]
-                    if FileManager.default.fileExists(atPath: XCFrameworkPath.path) {
-                        let zipFile = releaseDirPath + [XCFrameworkName + ".xcframework.zip"]
-                        let checksumFile = releaseDirPath + [XCFrameworkName + ".xcframework.checksum.txt"]
-                        try Utility.launch(path: "/usr/bin/zip", arguments: ["-qr", zipFile.path, XCFrameworkFile], currentDirectoryURL: URL.currentDirectory + ["../Sources"])
-                        Utility.shell("swift package compute-checksum \(zipFile.path) > \(checksumFile.path)")
-                    }
+        var dependencyTargetContent = ""
+        if self is ZipBaseBuild {
+            for target in library.targets {
+                let tmpChecksum = FileManager.default.temporaryDirectory + "\(library.rawValue)_checksum.txt"
+                if FileManager.default.fileExists(atPath: tmpChecksum.path) {
+                    try? FileManager.default.removeItem(at: tmpChecksum)
                 }
+                try! Utility.launch(path: "wget", arguments: ["-q", "-O", tmpChecksum.path, target.checksum], currentDirectoryURL: FileManager.default.temporaryDirectory)
+                let checksum = try String(contentsOf: tmpChecksum, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+                dependencyTargetContent += """
+                
+                        .binaryTarget(
+                            name: "\(target.name)",
+                            url: "\(target.url)",
+                            checksum: "\(checksum)"
+                        ),
+                """
+                try? FileManager.default.removeItem(at: tmpChecksum)
             }
+        } else {
+            for target in library.targets {
+                let checksumFile = releaseDirPath + [target.name + ".xcframework.checksum.txt"]
+                if !FileManager.default.fileExists(atPath: checksumFile.path) {
+                    continue
+                }
+                let checksum = try String(contentsOf: checksumFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+                dependencyTargetContent += """
+
+                        .binaryTarget(
+                            name: "\(target.name)",
+                            url: "\(target.url)",
+                            checksum: "\(checksum)"
+                        ),
+                """
+            }
+        }
+
+        if dependencyTargetContent.isEmpty {
+            return
+        }
+
+        if let data = FileManager.default.contents(atPath: packageFile.path), var str = String(data: data, encoding: .utf8) {
+            let placeholderChars = "//AUTO_GENERATE_TARGETS_END//"
+            str = str.replacingOccurrences(of: 
+            """
+                    \(placeholderChars)
+            """, with: 
+            """
+            \(dependencyTargetContent)
+                    \(placeholderChars)
+            """)
+            try! str.write(toFile: packageFile.path, atomically: true, encoding: .utf8)
         }
     }
 
@@ -676,12 +746,34 @@ class ZipBaseBuild : BaseBuild {
                 }
             }
         }
+
+        try generatePackageManagerFile()
+    }
+}
+
+class PackageTarget {
+    let name: String
+    let url : String
+    let checksum: String
+
+    init(name: String, url : String, checksum: String) {
+        self.name = name
+        self.url = url
+        self.checksum = checksum
+    }
+
+    static func target(
+        name: String,
+        url : String,
+        checksum: String
+    ) -> PackageTarget {
+        return PackageTarget(name: name, url: url, checksum: checksum)
     }
 }
 
 
 enum PlatformType: String, CaseIterable {
-    case maccatalyst, macos, isimulator, tvsimulator, tvos, ios
+    case xros, xrsimulator, maccatalyst, macos, isimulator, tvsimulator, tvos, ios
     var minVersion: String {
         switch self {
         case .ios, .isimulator:
@@ -693,6 +785,8 @@ enum PlatformType: String, CaseIterable {
         case .maccatalyst:
             // return "14.0"
             return ""
+        case .xros, .xrsimulator:
+            return "1.0"
         }
     }
 
@@ -706,6 +800,10 @@ enum PlatformType: String, CaseIterable {
             return "iossim"
         case .maccatalyst:
             return "maccat"
+        case .xros:
+            return "visionos"
+        case .xrsimulator:
+            return "visionossim"
         }
     }
 
@@ -724,18 +822,24 @@ enum PlatformType: String, CaseIterable {
             return "tvos-arm64_arm64e"
         case .tvsimulator:
             return "tvos-arm64_x86_64-simulator"
+        case .xros:
+            return "xros-arm64"
+        case .xrsimulator:
+            return "xros-arm64_x86_64-simulator"
         }
     }
 
 
     var architectures: [ArchType] {
         switch self {
-        case .ios:
+        case .ios, .xros:
             return [.arm64]
         case .tvos:
             return [.arm64, .arm64e]
+        case .xrsimulator:
+            return [.arm64]
         case .isimulator, .tvsimulator:
-            return [.arm64, .x86_64]
+            return [.arm64, .x86_64]  
         case .macos:
             // macos 不能用arm64，不然打包release包会报错，不能通过
             #if arch(x86_64)
@@ -748,9 +852,9 @@ enum PlatformType: String, CaseIterable {
         }
     }
 
-    fileprivate func deploymentTarget(_ arch: ArchType) -> String {
+    func deploymentTarget(_ arch: ArchType) -> String {
         switch self {
-        case .ios, .tvos, .macos:
+        case .ios, .tvos, .macos, .xros:
             return "\(arch.targetCpu)-apple-\(rawValue)\(minVersion)"
         case .maccatalyst:
             return "\(arch.targetCpu)-apple-ios-macabi"
@@ -758,10 +862,8 @@ enum PlatformType: String, CaseIterable {
             return PlatformType.ios.deploymentTarget(arch) + "-simulator"
         case .tvsimulator:
             return PlatformType.tvos.deploymentTarget(arch) + "-simulator"
-        // case .watchsimulator:
-        //     return PlatformType.watchos.deploymentTarget(arch) + "-simulator"
-        // case .xrsimulator:
-        //     return PlatformType.xros.deploymentTarget(arch) + "-simulator"
+        case .xrsimulator:
+            return PlatformType.xros.deploymentTarget(arch) + "-simulator"
         }
     }
 
@@ -776,7 +878,7 @@ enum PlatformType: String, CaseIterable {
             return "-mios-simulator-version-min=\(minVersion)"
         case .tvsimulator:
             return "-mtvos-simulator-version-min=\(minVersion)"
-        case .maccatalyst:
+        case .maccatalyst, .xros, .xrsimulator:
             return ""
             // return "-miphoneos-version-min=\(minVersion)"
         }
@@ -796,6 +898,10 @@ enum PlatformType: String, CaseIterable {
             return "MacOSX"
         case .maccatalyst:
             return "MacOSX"
+        case .xros:
+            return "XROS"
+        case .xrsimulator:
+            return "XRSimulator"
         }
     }
 
@@ -809,10 +915,8 @@ enum PlatformType: String, CaseIterable {
             return "ios-simulator"
         case .tvsimulator:
             return "tvos-simulator"
-        // case .xrsimulator:
-        //     return "xros-simulator"
-        // case .watchsimulator:
-        //     return "watchos-simulator"
+        case .xrsimulator:
+            return "xros-simulator"
         default:
             return rawValue
         }
@@ -824,6 +928,8 @@ enum PlatformType: String, CaseIterable {
             return "\(arch == .x86_64 ? "x86_64" : "arm64")-ios-darwin"
         case .tvos, .tvsimulator:
             return "\(arch == .x86_64 ? "x86_64" : "arm64")-tvos-darwin"
+        case .xros, .xrsimulator:
+            return "\(arch == .x86_64 ? "x86_64" : "arm64")-xros-darwin"
         case .macos:
             return "\(arch == .x86_64 ? "x86_64" : "arm64")-apple-darwin"
         }
@@ -885,17 +991,12 @@ enum ArchType: String, CaseIterable {
         return false
     }
 
-    var executableArchitecture: String? {
-        guard let arch = Bundle.main.executableArchitectures?.first?.intValue else {
-            return nil
-        }
-        // NSBundleExecutableArchitectureARM64
-        if arch == 0x0100_000C {
-            return "arm64"
-        } else if arch == NSBundleExecutableArchitectureX86_64 {
-            return "x86_64"
-        }
-        return nil
+    var hostArchitecture: String {
+        #if arch(arm64)
+        return "arm64"
+        #else
+        return "x86_64"
+        #endif
     }
 
     var cpuFamily: String {

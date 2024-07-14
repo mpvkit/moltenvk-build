@@ -8,14 +8,18 @@ let package = Package(
     products: [
         .library(
             name: "MoltenVK", 
-            targets: ["MoltenVK"]
+            targets: ["_MoltenVK"]
         ),
     ],
     targets: [
-        .binaryTarget(
-            name: "MoltenVK",
-            url: "\(MoltenVK_url)",
-            checksum: "\(MoltenVK_checksum)"
-        )
+        // Need a dummy target to embedded correctly.
+        // https://github.com/apple/swift-package-manager/issues/6069
+        .target(
+            name: "_MoltenVK",
+            dependencies: ["MoltenVK"],
+            path: "Sources/_Dummy"
+        ),
+        //AUTO_GENERATE_TARGETS_BEGIN//
+        //AUTO_GENERATE_TARGETS_END//
     ]
 )
