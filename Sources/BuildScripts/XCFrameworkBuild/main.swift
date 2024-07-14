@@ -67,34 +67,21 @@ private class BuildVulkan: BaseBuild {
         try? FileManager.default.createDirectory(at: releaseDirPath, withIntermediateDirectories: true, attributes: nil)
 
         // Generate xcframework for all platforms
-        try buildXCFramework(name: "MoltenVK", platforms: platforms())
+        let framework = "MoltenVK"
+        try buildXCFramework(name: framework, platforms: platforms())
         try packageAllRelease()
 
         // Generate xcframework for different platforms
         if BaseBuild.options.enableSplitPlatform {
-            var platforms = self.platforms()
-            if platforms.contains(.ios) {
-                var arguments : [PlatformType] = [.ios]
-                platforms.removeAll(where: { $0 == .ios } )
-                if platforms.contains(.isimulator) {
-                    arguments += [.isimulator]
-                    platforms.removeAll(where: { $0 == .isimulator } )
+            for (group, platforms) in BaseBuild.splitPlatformGroups {
+                let filterPlatforms = Array(Set(platforms).union(Set(BaseBuild.platforms)))
+                if !filterPlatforms.isEmpty {
+                    try buildXCFramework(name: "\(framework)-\(group)", platforms: filterPlatforms)
                 }
-                try buildXCFramework(name: "MoltenVK-ios", platforms: arguments)
-            }
-            if platforms.contains(.tvos) {
-                var arguments : [PlatformType] = [.tvos]
-                platforms.removeAll(where: { $0 == .tvos } )
-                if platforms.contains(.tvsimulator) {
-                    arguments += [.tvsimulator]
-                    platforms.removeAll(where: { $0 == .tvsimulator } )
-                }
-                try buildXCFramework(name: "MoltenVK-tvos", platforms: arguments)
-            }
-            for platform in platforms {
-                try buildXCFramework(name: "MoltenVK-\(platform.rawValue)", platforms: [platform])
             }
         }
+
+        try generatePackageManagerFile()
     }
 
     private func buildXCFramework(name: String, platforms: [PlatformType]) throws {
