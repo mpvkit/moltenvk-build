@@ -1,0 +1,69 @@
+name: Check new version
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 10 * * 1'
+
+jobs:
+  build:
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout MoltenVK
+        uses: actions/checkout@v4
+        with:
+          repository: "KhronosGroup/MoltenVK"
+          path: 'MoltenVK'
+          fetch-depth: 0
+
+      - name: Get latest verion
+        id: version
+        run: |
+          cd ./MoltenVK
+          latest_tag=$(git describe --tags `git rev-list --tags --max-count=1`)
+          echo "latest tag: $latest_tag"
+          echo "LATEST_VERSION=$latest_tag" >> $GITHUB_ENV
+          cd ..
+          rm -rf ./MoltenVK
+
+      - name: update to new version
+        uses: jannekem/run-python-script-action@v1
+        with:
+          script: |
+            import re
+
+            def parse_version(ver):
+              if '-' in ver or ver == '':
+                return 0
+              return int(re.sub(r'[^0-9]+', r'', ver))
+
+            commitMessage = ''
+
+            file_path = './Sources/BuildScripts/XCFrameworkBuild/main.swift'
+            with open(file_path, 'r', encoding='utf-8') as file:
+              content = file.read()
+            oldVersion = re.search(r'(case .vulkan[^"]+?)"(.+?)"', content).group(2)
+            print("old version:", oldVersion)
+            newVersion = '${{ env.LATEST_VERSION }}'
+            if parse_version(newVersion) > parse_version(oldVersion):
+              content = re.sub(r'(case .vulkan[^"]+?)"(.+?)"', r'\1"${{ env.LATEST_VERSION }}"', content, count=1)
+              commitMessage = "bump version to ${{ env.LATEST_VERSION }}\n"
+            with open(file_path, 'w', encoding='utf-8') as file:
+              file.write(content)
+
+            set_env('COMMIT_MESSAGE', commitMessage)
+
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          add-paths: |
+            ./Sources/BuildScripts/XCFrameworkBuild/main.swift
+          title: "MoltenVK ${{ env.LATEST_VERSION }}"
+          body: "${{ env.COMMIT_MESSAGE }}"
+          commit-message: "chore: ${{ env.COMMIT_MESSAGE }}"
