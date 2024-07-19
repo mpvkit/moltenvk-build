@@ -47,19 +47,26 @@ enum Library: String, CaseIterable {
 private class BuildVulkan: BaseBuild {
     init() {
         super.init(library: .vulkan)
+    }
 
+    override func beforeBuild() throws {
+        try super.beforeBuild()
+
+        
         // // switch to main branch to pull newest code
         // try! Utility.launch(path: "/usr/bin/git", arguments: ["remote", "set-branches", "--add", "origin", "main"], currentDirectoryURL: directoryURL)
         // try! Utility.launch(path: "/usr/bin/git", arguments: ["fetch", "origin", "main:main"], currentDirectoryURL: directoryURL)
         // try! Utility.launch(path: "/usr/bin/git", arguments: ["checkout", "main"], currentDirectoryURL: directoryURL)
-    }
 
-    override func buildALL() throws {
         // pull dependencies code
         let arguments = platforms().map {
             "--\($0.name)"
         }
         try Utility.launch(path: (directoryURL + "fetchDependencies").path, arguments: arguments, currentDirectoryURL: directoryURL)
+    }
+
+    override func buildALL() throws {
+        try self.beforeBuild()
 
         // clean old release files
         let releaseDirPath = URL.currentDirectory + ["release"]
@@ -81,7 +88,7 @@ private class BuildVulkan: BaseBuild {
             }
         }
 
-        try generatePackageManagerFile()
+        try self.afterBuild()
     }
 
     private func buildXCFramework(name: String, platforms: [PlatformType]) throws {
