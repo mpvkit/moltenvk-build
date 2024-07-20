@@ -52,7 +52,7 @@ jobs:
             newVersion = '${{ env.LATEST_VERSION }}'
             if parse_version(newVersion) > parse_version(oldVersion):
               content = re.sub(r'(case .vulkan[^"]+?)"(.+?)"', r'\1"${{ env.LATEST_VERSION }}"', content, count=1)
-              commitMessage = "bump version to ${{ env.LATEST_VERSION }}\n"
+              commitMessage = "bump version to ${{ env.LATEST_VERSION }}"
             with open(file_path, 'w', encoding='utf-8') as file:
               file.write(content)
 
