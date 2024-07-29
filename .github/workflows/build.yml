@@ -80,5 +80,6 @@ jobs:
           ./dist/release/*.txt
           ./dist/release/*.zip
         prerelease: ${{ contains(env.RELEASE_VERSION, 'alpha') || contains(env.RELEASE_VERSION, 'beta') }}
+        body: "https://github.com/KhronosGroup/MoltenVK/releases/tag/${{ env.BUILD_VERSION }}"
         generate_release_notes: true
         fail_on_unmatched_files: true

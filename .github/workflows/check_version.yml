@@ -42,28 +42,26 @@ jobs:
                 return 0
               return int(re.sub(r'[^0-9]+', r'', ver))
 
-            commitMessage = ''
-
             file_path = './Sources/BuildScripts/XCFrameworkBuild/main.swift'
             with open(file_path, 'r', encoding='utf-8') as file:
               content = file.read()
             oldVersion = re.search(r'(case .vulkan[^"]+?)"(.+?)"', content).group(2)
             print("old version:", oldVersion)
             newVersion = '${{ env.LATEST_VERSION }}'
+            print("new version:", newVersion)
             if parse_version(newVersion) > parse_version(oldVersion):
               content = re.sub(r'(case .vulkan[^"]+?)"(.+?)"', r'\1"${{ env.LATEST_VERSION }}"', content, count=1)
-              commitMessage = "bump version to ${{ env.LATEST_VERSION }}"
-            with open(file_path, 'w', encoding='utf-8') as file:
-              file.write(content)
-
-            set_env('COMMIT_MESSAGE', commitMessage)
+              set_env('FOUND_NEW_VERSION', '1')
+              with open(file_path, 'w', encoding='utf-8') as file:
+                file.write(content)
 
 
       - name: Create Pull Request
+        if: env.FOUND_NEW_VERSION
         uses: peter-evans/create-pull-request@v6
         with:
           add-paths: |
             ./Sources/BuildScripts/XCFrameworkBuild/main.swift
-          title: "MoltenVK ${{ env.LATEST_VERSION }}"
-          body: "${{ env.COMMIT_MESSAGE }}"
-          commit-message: "chore: ${{ env.COMMIT_MESSAGE }}"
+          title: "bump version to ${{ env.LATEST_VERSION }}"
+          body: "https://github.com/KhronosGroup/MoltenVK/releases/tag/${{ env.LATEST_VERSION }}\n"
+          commit-message: "chore: bump version to ${{ env.LATEST_VERSION }}"
