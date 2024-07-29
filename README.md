@@ -1,5 +1,7 @@
 # moltenvk-build
 
+![GitHub Release](https://img.shields.io/github/v/release/mpvkit/moltenvk-build)
+
 build scripts for [moltenvk](https://github.com/KhronosGroup/MoltenVK)
 
 ## Installation
