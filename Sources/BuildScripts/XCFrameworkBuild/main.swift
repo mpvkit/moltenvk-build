@@ -58,7 +58,7 @@ private class BuildVulkan: BaseBuild {
         // try! Utility.launch(path: "/usr/bin/git", arguments: ["fetch", "origin", "main:main"], currentDirectoryURL: directoryURL)
         // try! Utility.launch(path: "/usr/bin/git", arguments: ["checkout", "main"], currentDirectoryURL: directoryURL)
 
-        // pull dependencies code
+        // pull dependencies code and build dependencies
         let arguments = platforms().map {
             "--\($0.name)"
         }
