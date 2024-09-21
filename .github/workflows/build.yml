@@ -74,12 +74,12 @@ jobs:
     - name: Upload binary to GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        name: ${{ env.BUILD_VERSION }}
+        name: ${{ env.RELEASE_VERSION }}
         tag_name: ${{ env.RELEASE_VERSION }}
         files: |
           ./dist/release/*.txt
           ./dist/release/*.zip
-        prerelease: ${{ contains(env.RELEASE_VERSION, 'alpha') || contains(env.RELEASE_VERSION, 'beta') }}
+        prerelease: ${{ contains(env.RELEASE_VERSION, '-') }}
         body: "https://github.com/KhronosGroup/MoltenVK/releases/tag/${{ env.BUILD_VERSION }}"
         generate_release_notes: true
         fail_on_unmatched_files: true
