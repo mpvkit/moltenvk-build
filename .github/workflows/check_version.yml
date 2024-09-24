@@ -3,7 +3,7 @@ name: Check new version
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 10 * * 1'
+    - cron: '0 0 * * 1'
 
 jobs:
   build:
@@ -14,22 +14,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout MoltenVK
+      - name: Checkout latest code
         uses: actions/checkout@v4
         with:
           repository: "KhronosGroup/MoltenVK"
-          path: 'MoltenVK'
+          path: 'latest_code'
           fetch-depth: 0
 
       - name: Get latest verion
         id: version
         run: |
-          cd ./MoltenVK
-          latest_tag=$(git describe --tags `git rev-list --tags --max-count=1`)
+          cd ./latest_code
+          latest_tag=$(git tag --sort=-v:refname | grep -v "-" | head -n 1)
           echo "latest tag: $latest_tag"
           echo "LATEST_VERSION=$latest_tag" >> $GITHUB_ENV
-          cd ..
-          rm -rf ./MoltenVK
+          rm -rf ../latest_code
 
       - name: update to new version
         uses: jannekem/run-python-script-action@v1

@@ -16,7 +16,7 @@ enum Library: String, CaseIterable {
     var version: String {
         switch self {
         case .vulkan:
-            return "v1.2.10"
+            return "v1.2.9"
         }
     }
 
@@ -45,6 +45,8 @@ enum Library: String, CaseIterable {
 
 
 private class BuildVulkan: BaseBuild {
+    var vulkanVersion: String = ""
+
     init() {
         super.init(library: .vulkan)
     }
@@ -53,16 +55,18 @@ private class BuildVulkan: BaseBuild {
         try super.beforeBuild()
 
         
-        // // switch to main branch to pull newest code
-        // try! Utility.launch(path: "/usr/bin/git", arguments: ["remote", "set-branches", "--add", "origin", "main"], currentDirectoryURL: directoryURL)
-        // try! Utility.launch(path: "/usr/bin/git", arguments: ["fetch", "origin", "main:main"], currentDirectoryURL: directoryURL)
-        // try! Utility.launch(path: "/usr/bin/git", arguments: ["checkout", "main"], currentDirectoryURL: directoryURL)
-
         // pull dependencies code and build dependencies
         let arguments = platforms().map {
             "--\($0.name)"
         }
         try Utility.launch(path: (directoryURL + "fetchDependencies").path, arguments: arguments, currentDirectoryURL: directoryURL)
+
+        // get vulkan api version
+        let vulkanHeaderRepoURL = directoryURL + "External/Vulkan-Headers"
+        let vulkanVersion = Utility.shell("git describe --tags `git rev-parse HEAD`", isOutput: true, currentDirectoryURL: vulkanHeaderRepoURL)!
+        if vulkanVersion.isEmpty {
+            throw NSError(domain: "Failed to get vulkan version", code: 1)
+        }
     }
 
     override func buildALL() throws {
@@ -119,7 +123,7 @@ private class BuildVulkan: BaseBuild {
         try FileManager.default.copyItem(at: includePath, to: destIncludePath)
 
         // generate pkg-config file example
-        let version = self.library.version.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
+        let version = self.vulkanVersion.trimmingCharacters(in: CharacterSet(charactersIn: "v"))
         for platform in platforms() {
             var frameworks = ["CoreFoundation", "CoreGraphics", "Foundation", "IOSurface", "Metal", "QuartzCore"]
             if platform == .macos {
