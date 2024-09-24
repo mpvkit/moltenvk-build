@@ -63,8 +63,8 @@ private class BuildVulkan: BaseBuild {
 
         // get vulkan api version
         let vulkanHeaderRepoURL = directoryURL + "External/Vulkan-Headers"
-        let vulkanVersion = Utility.shell("git describe --tags `git rev-parse HEAD`", isOutput: true, currentDirectoryURL: vulkanHeaderRepoURL)!
-        if vulkanVersion.isEmpty {
+        self.vulkanVersion = Utility.shell("git describe --tags `git rev-parse HEAD`", isOutput: true, currentDirectoryURL: vulkanHeaderRepoURL)!
+        if self.vulkanVersion.isEmpty {
             throw NSError(domain: "Failed to get vulkan version", code: 1)
         }
     }
