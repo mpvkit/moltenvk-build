@@ -23,8 +23,8 @@ let package = Package(
 
         .binaryTarget(
             name: "MoltenVK",
-            url: "https://github.com/mpvkit/moltenvk-build/releases/download/1.2.11-artifacts/MoltenVK.xcframework.zip",
-            checksum: "b871080b43759ad26656fd07360c4add408ef2e7f6ebad8e376b081113e835ed"
+            url: "https://github.com/mpvkit/moltenvk-build/releases/download/1.4.0/MoltenVK.xcframework.zip",
+            checksum: "81aa59540c563e17558238e9475166a4b29c4119878e216d2de42ca9315bcc40"
         ),
         //AUTO_GENERATE_TARGETS_END//
     ]
