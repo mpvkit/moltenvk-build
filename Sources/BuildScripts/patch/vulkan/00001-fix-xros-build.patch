@@ -1,0 +1,13 @@
+diff --git forkSrcPrefix/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm forkDstPrefix/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
+index f87bdb8c1e7a60e3e9c437ca4afaa9603c7390d3..1fb1a518d4cce2c1caa4f10393446b323fc75cda 100644
+--- forkSrcPrefix/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
++++ forkDstPrefix/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
+@@ -1773,7 +1773,7 @@ uint32_t MVKPhysicalDevice::getExternalResourceMemoryTypeBits(VkExternalMemoryHa
+ 	case MTLStorageModeShared:
+ 		memoryTypeBits = _hostCoherentMemoryTypes;
+ 		break;
+-#if !MVK_IOS && !MVK_TVOS
++#if !MVK_IOS && !MVK_TVOS && !MVK_VISIONOS
+ 	case MTLStorageModeManaged:
+ 		memoryTypeBits = _hostVisibleMemoryTypes;
+ 		break;
