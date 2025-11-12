@@ -79,6 +79,9 @@ jobs:
           ./dist/release/*.txt
           ./dist/release/*.zip
         prerelease: ${{ contains(env.RELEASE_VERSION, '-') }}
-        body: "https://github.com/KhronosGroup/MoltenVK/releases/tag/${{ env.BUILD_VERSION }}"
         generate_release_notes: true
         fail_on_unmatched_files: true
+        body: |
+          https://github.com/KhronosGroup/MoltenVK/releases/tag/${{ env.BUILD_VERSION }}
+
+          ![download](https://img.shields.io/github/downloads/${{ github.repository }}/${{ env.RELEASE_VERSION }}/total?label=Downloads)
