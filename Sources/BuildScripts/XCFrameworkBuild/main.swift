@@ -106,7 +106,7 @@ private class BuildVulkan: BaseBuild {
         let XCFrameworkFile = "MoltenVK.xcframework"
         let zipFile = releaseDirPath + [name + ".xcframework.zip"]
         let checksumFile = releaseDirPath + [name + ".xcframework.checksum.txt"]
-        try Utility.launch(path: "/usr/bin/zip", arguments: ["-qr", zipFile.path, XCFrameworkFile], currentDirectoryURL: directoryURL + "Package/Release/MoltenVK/static/")
+        try Utility.launch(path: "/usr/bin/zip", arguments: ["-qry", zipFile.path, XCFrameworkFile], currentDirectoryURL: directoryURL + "Package/Release/MoltenVK/static/")
         Utility.shell("swift package compute-checksum \(zipFile.path) > \(checksumFile.path)")
     }
 
@@ -168,7 +168,7 @@ private class BuildVulkan: BaseBuild {
         // zip all
         let destZipLibPath = releaseDirPath + ["MoltenVK-all.zip"]
         try? FileManager.default.removeItem(at: destZipLibPath)
-        try Utility.launch(path: "/usr/bin/zip", arguments: ["-qr", destZipLibPath.path, "./"], currentDirectoryURL: releaseLibPath)
+        try Utility.launch(path: "/usr/bin/zip", arguments: ["-qry", destZipLibPath.path, "./"], currentDirectoryURL: releaseLibPath)
     }
 
 }
