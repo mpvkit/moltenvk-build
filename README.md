@@ -5,6 +5,9 @@
 
 build scripts for [moltenvk](https://github.com/KhronosGroup/MoltenVK)
 
+> This is a component of the [MPVKit](https://github.com/mpvkit/MPVKit) project.
+
+
 ## Installation
 
 ### Swift Package Manager
