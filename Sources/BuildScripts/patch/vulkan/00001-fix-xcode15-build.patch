@@ -1,0 +1,14 @@
+diff --git forkSrcPrefix/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm forkDstPrefix/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
+index e1f3c04ebe9eeb23358f7a529541ed0cfe7c86d5..125c034fd83827a1e1130586f47dfa87d7823472 100644
+--- forkSrcPrefix/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
++++ forkDstPrefix/MoltenVK/MoltenVK/GPUObjects/MVKDevice.mm
+@@ -106,7 +106,9 @@ MVKMTLDeviceCapabilities::MVKMTLDeviceCapabilities(id<MTLDevice> mtlDev) {
+ 	supportsApple6 = supportsGPUFam(Apple6, mtlDev);
+ 	supportsApple7 = supportsGPUFam(Apple7, mtlDev);
+ 	supportsApple8 = supportsGPUFam(Apple8, mtlDev);
++#if MVK_XCODE_15 && !MVK_TVOS && !MVK_VISIONOS
+ 	supportsApple9 = supportsGPUFam(Apple9, mtlDev);
++#endif
+ #if MVK_XCODE_26
+ 	supportsApple10 = supportsGPUFam(Apple10, mtlDev);
+ #endif
