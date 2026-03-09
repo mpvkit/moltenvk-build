@@ -20,6 +20,7 @@ let package = Package(
             path: "Sources/_Dummy"
         ),
         //AUTO_GENERATE_TARGETS_BEGIN//
+
         //AUTO_GENERATE_TARGETS_END//
     ]
 )

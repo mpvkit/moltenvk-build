@@ -1,17 +1,17 @@
 import Foundation
+import BuildShared
 
 do {
-    let options = try ArgumentOptions.parse(CommandLine.arguments)
-    try Build.performCommand(options)
+    let options = try BuildRunner.performCommand()
 
-    try BuildVulkan().buildALL()
+    try BuildVulkan(options: options).buildALL()
 } catch {
     print(error.localizedDescription)
     exit(1)
 }
 
 
-enum Library: String, CaseIterable {
+enum Library: String, CaseIterable, BuildLibrary {
     case vulkan
     var version: String {
         switch self {
@@ -34,8 +34,8 @@ enum Library: String, CaseIterable {
             return  [
                 .target(
                     name: "MoltenVK",
-                    url: "https://github.com/mpvkit/moltenvk-build/releases/download/\(BaseBuild.options.releaseVersion)/MoltenVK.xcframework.zip",
-                    checksum: "https://github.com/mpvkit/moltenvk-build/releases/download/\(BaseBuild.options.releaseVersion)/MoltenVK.xcframework.checksum.txt"
+                    url: "https://github.com/mpvkit/moltenvk-build/releases/download/\(BuildRunner.options!.releaseVersion)/MoltenVK.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/moltenvk-build/releases/download/\(BuildRunner.options!.releaseVersion)/MoltenVK.xcframework.checksum.txt"
                 ),
             ]
         }
@@ -47,8 +47,8 @@ enum Library: String, CaseIterable {
 private class BuildVulkan: BaseBuild {
     var vulkanVersion: String = ""
 
-    init() {
-        super.init(library: .vulkan)
+    init(options: ArgumentOptions) {
+        super.init(library: Library.vulkan, options: options)
     }
 
     override func beforeBuild() throws {
@@ -83,9 +83,9 @@ private class BuildVulkan: BaseBuild {
         try packageAllRelease()
 
         // Generate xcframework for different platforms
-        if BaseBuild.options.enableSplitPlatform {
-            for (group, platforms) in BaseBuild.splitPlatformGroups {
-                let filterPlatforms = Array(Set(platforms).union(Set(BaseBuild.platforms)))
+        if options.enableSplitPlatform {
+            for (group, groupPlatforms) in BaseBuild.splitPlatformGroups {
+                let filterPlatforms = Array(Set(groupPlatforms).union(Set(platforms())))
                 if !filterPlatforms.isEmpty {
                     try buildXCFramework(name: "\(framework)-\(group)", platforms: filterPlatforms)
                 }

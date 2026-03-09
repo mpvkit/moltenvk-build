@@ -6,6 +6,7 @@
 build scripts for [moltenvk](https://github.com/KhronosGroup/MoltenVK)
 
 > This is a component of the [MPVKit](https://github.com/mpvkit/MPVKit) project.
+> Shared build logic and reusable GitHub Actions are provided by [mpvkit/BuildShared](https://github.com/mpvkit/BuildShared).
 
 
 ## Installation
@@ -29,3 +30,5 @@ make clean
 # see help
 make help
 ```
+
+The Swift build entrypoint in `Sources/BuildScripts` depends on `BuildShared`, and the workflows in `.github/workflows` delegate to reusable workflows from the same repository.
