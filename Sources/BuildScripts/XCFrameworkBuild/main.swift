@@ -30,11 +30,14 @@ enum Library: String, CaseIterable, BuildLibrary {
     var targets : [PackageTarget] {
         switch self {
         case .vulkan:
+            guard let releaseVersion = BuildRunner.options?.releaseVersion else {
+                preconditionFailure("BuildRunner.performCommand() must be called before accessing package targets.")
+            }
             return  [
                 .target(
                     name: "MoltenVK",
-                    url: "https://github.com/mpvkit/moltenvk-build/releases/download/\(BuildRunner.options!.releaseVersion)/MoltenVK.xcframework.zip",
-                    checksum: "https://github.com/mpvkit/moltenvk-build/releases/download/\(BuildRunner.options!.releaseVersion)/MoltenVK.xcframework.checksum.txt"
+                    url: "https://github.com/mpvkit/moltenvk-build/releases/download/\(releaseVersion)/MoltenVK.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/moltenvk-build/releases/download/\(releaseVersion)/MoltenVK.xcframework.checksum.txt"
                 ),
             ]
         }
@@ -83,8 +86,9 @@ private class BuildVulkan: BaseBuild {
 
         // Generate xcframework for different platforms
         if options.enableSplitPlatform {
-            for (group, groupPlatforms) in BaseBuild.splitPlatformGroups {
-                let filterPlatforms = Array(Set(groupPlatforms).union(Set(platforms())))
+            let selectedPlatforms = platforms()
+            for (group, platformsInGroup) in BaseBuild.splitPlatformGroups {
+                let filterPlatforms = Array(Set(platformsInGroup).union(Set(selectedPlatforms)))
                 if !filterPlatforms.isEmpty {
                     try buildXCFramework(name: "\(framework)-\(group)", platforms: filterPlatforms)
                 }
