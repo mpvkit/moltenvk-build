@@ -29,13 +29,16 @@ enum Library: String, CaseIterable, BuildLibrary {
 
     // for generate Package.swift
     var targets : [PackageTarget] {
+        guard let releaseVersion = BuildRunner.options?.releaseVersion else {
+            preconditionFailure("BuildRunner.options.releaseVersion must be set before generating package targets.")
+        }
         switch self {
         case .vulkan:
             return  [
                 .target(
                     name: "MoltenVK",
-                    url: "https://github.com/mpvkit/moltenvk-build/releases/download/\(BuildRunner.options!.releaseVersion)/MoltenVK.xcframework.zip",
-                    checksum: "https://github.com/mpvkit/moltenvk-build/releases/download/\(BuildRunner.options!.releaseVersion)/MoltenVK.xcframework.checksum.txt"
+                    url: "https://github.com/mpvkit/moltenvk-build/releases/download/\(releaseVersion)/MoltenVK.xcframework.zip",
+                    checksum: "https://github.com/mpvkit/moltenvk-build/releases/download/\(releaseVersion)/MoltenVK.xcframework.checksum.txt"
                 ),
             ]
         }
