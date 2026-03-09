@@ -6,6 +6,7 @@
 build scripts for [moltenvk](https://github.com/KhronosGroup/MoltenVK)
 
 > This is a component of the [MPVKit](https://github.com/mpvkit/MPVKit) project.
+> Build automation is shared via [mpvkit/BuildShared](https://github.com/mpvkit/BuildShared).
 
 
 ## Installation
