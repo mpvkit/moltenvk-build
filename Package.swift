@@ -2,6 +2,7 @@
 
 import PackageDescription
 
+// Template consumed by BuildShared-based build scripts for release Package.swift generation.
 let package = Package(
     name: "moltenvk",
     platforms: [.macOS(.v11), .iOS(.v14), .tvOS(.v14)],
@@ -23,8 +24,8 @@ let package = Package(
 
         .binaryTarget(
             name: "MoltenVK",
-            url: "https://github.com/mpvkit/moltenvk-build/releases/download/1.4.1/MoltenVK.xcframework.zip",
-            checksum: "9bd1ca1e4563bacd25d6e55d37b10341d50b2601bc2684bc332188e79daa2b79"
+            url: "https://github.com/mpvkit/moltenvk-build/releases/download/1.4.1-fix/MoltenVK.xcframework.zip",
+            checksum: "99650150c2c192c46fe55844437debe86901922f2899e75afbeb2eb9e3cd5ae9"
         ),
         //AUTO_GENERATE_TARGETS_END//
     ]
