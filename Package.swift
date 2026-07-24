@@ -5,7 +5,7 @@ import PackageDescription
 // Template consumed by BuildShared-based build scripts for release Package.swift generation.
 let package = Package(
     name: "moltenvk",
-    platforms: [.macOS(.v11), .iOS(.v14), .tvOS(.v14)],
+    platforms: [.macOS(.v12), .iOS(.v15), .tvOS(.v15)],
     products: [
         .library(
             name: "MoltenVK", 

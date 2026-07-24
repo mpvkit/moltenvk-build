@@ -55,6 +55,7 @@ private class BuildVulkan: BaseBuild {
 
         
         // pull dependencies code and build dependencies
+        try patchFetchDependenciesForDeploymentTarget()
         let arguments = platforms().map {
             "--\($0.name)"
         }
@@ -96,6 +97,7 @@ private class BuildVulkan: BaseBuild {
     }
 
     private func buildXCFramework(name: String, platforms: [PlatformType]) throws {
+        try patchMakefileForDeploymentTarget()
         let arguments = platforms.map(\.name)
         try Utility.launch(path: "/usr/bin/make", arguments: ["clean"], currentDirectoryURL: directoryURL)
         try Utility.launch(path: "/usr/bin/make", arguments: arguments, currentDirectoryURL: directoryURL)
@@ -169,6 +171,40 @@ private class BuildVulkan: BaseBuild {
         let destZipLibPath = releaseDirPath + ["MoltenVK-all.zip"]
         try? FileManager.default.removeItem(at: destZipLibPath)
         try Utility.launch(path: "/usr/bin/zip", arguments: ["-qry", destZipLibPath.path, "./"], currentDirectoryURL: releaseLibPath)
+    }
+
+    private func patchMakefileForDeploymentTarget() throws {
+        let makefileURL = directoryURL + "Makefile"
+        guard let data = FileManager.default.contents(atPath: makefileURL.path),
+              let content = String(data: data, encoding: .utf8) else { return }
+        let target = PlatformType.xros.minVersion
+        var lines = content.components(separatedBy: "\n")
+        var modified = false
+        for (i, line) in lines.enumerated() {
+            if line.contains("visionOS only") && line.contains("GCC_PREPROCESSOR_DEFINITIONS") {
+                if line.contains("XROS_DEPLOYMENT_TARGET=") { continue }
+                lines[i] = line.replacingOccurrences(
+                    of: "GCC_PREPROCESSOR_DEFINITIONS",
+                    with: "XROS_DEPLOYMENT_TARGET=\(target) GCC_PREPROCESSOR_DEFINITIONS"
+                )
+                modified = true
+            }
+        }
+        if modified {
+            try lines.joined(separator: "\n").write(to: makefileURL, atomically: true, encoding: .utf8)
+        }
+    }
+
+    private func patchFetchDependenciesForDeploymentTarget() throws {
+        let scriptURL = directoryURL + "fetchDependencies"
+        guard let data = FileManager.default.contents(atPath: scriptURL.path),
+              var content = String(data: data, encoding: .utf8) else { return }
+        let target = PlatformType.xros.minVersion
+        if content.contains("XROS_DEPLOYMENT_TARGET=\(target)") { return }
+        let marker = "-destination \"generic/platform=${XC_DEST}\""
+        let injection = "-destination \"generic/platform=${XC_DEST}\" XROS_DEPLOYMENT_TARGET=\(target)"
+        content = content.replacingOccurrences(of: marker, with: injection)
+        try content.write(to: scriptURL, atomically: true, encoding: .utf8)
     }
 
 }
