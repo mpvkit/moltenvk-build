@@ -15,7 +15,7 @@ enum Library: String, CaseIterable, BuildLibrary {
     var version: String {
         switch self {
         case .vulkan:
-            return "v1.4.1"
+            return "v1.4.2"
         }
     }
 
